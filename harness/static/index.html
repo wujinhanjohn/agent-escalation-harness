@@ -1,0 +1,369 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Escalation Inbox</title>
+  <style>
+    :root {
+      --bg:        #0c0d10;
+      --panel:     #14161b;
+      --panel-2:   #1a1d24;
+      --line:      #262a33;
+      --line-soft: #1f232b;
+      --text:      #e6e8ec;
+      --muted:     #8a909c;
+      --faint:     #5a606c;
+      --accent:    #e0a94a;
+      --accent-dim:#8a6a2c;
+      --ok:        #57b784;
+      --mono: "JetBrains Mono", "SF Mono", "SFMono-Regular", ui-monospace,
+              "Menlo", "Consolas", monospace;
+      --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue",
+              Arial, sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+    html, body { margin: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--sans);
+      font-size: 14px;
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .wrap { max-width: 1080px; margin: 0 auto; padding: 28px 24px 64px; }
+
+    /* Masthead ------------------------------------------------------------ */
+    header {
+      display: flex; align-items: baseline; gap: 14px;
+      padding-bottom: 16px; border-bottom: 1px solid var(--line);
+    }
+    .dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: var(--accent); box-shadow: 0 0 10px var(--accent);
+      align-self: center;
+    }
+    h1 {
+      font-family: var(--mono);
+      font-size: 15px; font-weight: 600; letter-spacing: .04em;
+      margin: 0; text-transform: uppercase;
+    }
+    .sub { color: var(--faint); font-family: var(--mono); font-size: 12px; }
+    .live { margin-left: auto; font-family: var(--mono); font-size: 11px;
+            color: var(--muted); display: flex; align-items: center; gap: 7px; }
+    .pulse {
+      width: 7px; height: 7px; border-radius: 50%; background: var(--ok);
+      animation: pulse 2s infinite ease-in-out;
+    }
+    @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .25; } }
+
+    /* Stats strip --------------------------------------------------------- */
+    .stats {
+      display: grid; grid-template-columns: repeat(4, 1fr);
+      gap: 1px; background: var(--line); border: 1px solid var(--line);
+      margin: 20px 0 26px; border-radius: 8px; overflow: hidden;
+    }
+    .stat { background: var(--panel); padding: 14px 16px; }
+    .stat .k {
+      font-family: var(--mono); font-size: 10.5px; letter-spacing: .08em;
+      text-transform: uppercase; color: var(--faint);
+    }
+    .stat .v {
+      font-family: var(--mono); font-size: 22px; font-weight: 600;
+      margin-top: 5px; color: var(--text);
+    }
+    .stat .v.accent { color: var(--accent); }
+    .stat .v small { font-size: 12px; color: var(--muted); font-weight: 400; }
+
+    /* Cards --------------------------------------------------------------- */
+    .list-head {
+      display: flex; align-items: baseline; gap: 10px; margin: 0 2px 12px;
+    }
+    .list-head h2 {
+      font-family: var(--mono); font-size: 12px; letter-spacing: .06em;
+      text-transform: uppercase; color: var(--muted); font-weight: 600; margin: 0;
+    }
+    .count-pill {
+      font-family: var(--mono); font-size: 11px; color: var(--bg);
+      background: var(--accent); padding: 1px 8px; border-radius: 999px;
+      font-weight: 600;
+    }
+
+    .card {
+      background: var(--panel); border: 1px solid var(--line);
+      border-radius: 10px; margin-bottom: 16px; overflow: hidden;
+    }
+    .card-top {
+      display: flex; align-items: center; gap: 12px;
+      padding: 14px 18px; border-bottom: 1px solid var(--line-soft);
+      background: var(--panel-2);
+    }
+    .status-led {
+      width: 9px; height: 9px; border-radius: 50%; background: var(--accent);
+      box-shadow: 0 0 8px var(--accent-dim); flex: none;
+    }
+    .card-title { font-weight: 600; font-size: 15px; }
+    .req-id {
+      font-family: var(--mono); font-size: 11.5px; color: var(--faint);
+      margin-left: 2px;
+    }
+    .badge {
+      margin-left: auto; font-family: var(--mono); font-size: 11px;
+      letter-spacing: .04em; text-transform: uppercase; color: var(--accent);
+      border: 1px solid var(--accent-dim); border-radius: 5px;
+      padding: 2px 9px; background: rgba(224,169,74,.07);
+    }
+
+    .card-body { padding: 16px 18px 18px; }
+    .field-label {
+      font-family: var(--mono); font-size: 10.5px; letter-spacing: .08em;
+      text-transform: uppercase; color: var(--faint); margin: 0 0 5px;
+    }
+    .context { color: var(--muted); margin: 0 0 14px; }
+    .instructions {
+      background: var(--bg); border: 1px solid var(--line-soft);
+      border-radius: 7px; padding: 11px 13px; margin: 0 0 18px;
+      color: var(--text); white-space: pre-wrap; font-size: 13px;
+    }
+
+    form .fields { display: grid; gap: 12px; }
+    .fieldrow label {
+      display: block; font-family: var(--mono); font-size: 12px;
+      color: var(--text); margin-bottom: 5px;
+    }
+    .fieldrow .req-star { color: var(--accent); }
+    .fieldrow .secret-tag {
+      font-size: 10px; color: var(--faint); text-transform: uppercase;
+      letter-spacing: .06em; margin-left: 6px;
+    }
+    input[type=text], input[type=password] {
+      width: 100%; background: var(--bg); border: 1px solid var(--line);
+      border-radius: 6px; padding: 9px 11px; color: var(--text);
+      font-family: var(--mono); font-size: 13px; outline: none;
+    }
+    input:focus { border-color: var(--accent-dim);
+                  box-shadow: 0 0 0 2px rgba(224,169,74,.12); }
+
+    .card-actions {
+      display: flex; align-items: center; gap: 12px; margin-top: 18px;
+    }
+    button.send {
+      background: var(--accent); color: #1a1205; border: none;
+      font-family: var(--mono); font-weight: 600; font-size: 13px;
+      letter-spacing: .03em; padding: 9px 18px; border-radius: 6px;
+      cursor: pointer;
+    }
+    button.send:hover { filter: brightness(1.08); }
+    button.send:disabled { opacity: .5; cursor: default; }
+    .row-msg { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+    .row-msg.err { color: #d98a8a; }
+    .row-msg.ok { color: var(--ok); }
+
+    /* Empty state --------------------------------------------------------- */
+    .empty {
+      text-align: center; padding: 64px 24px; color: var(--faint);
+      border: 1px dashed var(--line); border-radius: 10px;
+    }
+    .empty .big {
+      font-family: var(--mono); font-size: 15px; color: var(--muted);
+      letter-spacing: .04em;
+    }
+    .empty .small { margin-top: 8px; font-size: 13px; }
+
+    footer {
+      margin-top: 32px; padding-top: 16px; border-top: 1px solid var(--line);
+      font-family: var(--mono); font-size: 11px; color: var(--faint);
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <span class="dot"></span>
+      <h1>Escalation Inbox</h1>
+      <span class="sub">agent &rarr; human unblock queue</span>
+      <span class="live"><span class="pulse"></span>polling /api/requests &middot; 2s</span>
+    </header>
+
+    <section class="stats" id="stats" aria-label="statistics"></section>
+
+    <div class="list-head">
+      <h2>Pending walls</h2>
+      <span class="count-pill" id="pending-count">0</span>
+    </div>
+
+    <section id="list"></section>
+
+    <footer>agent-escalation-harness &middot; local &middot; no cloud</footer>
+  </div>
+
+  <script>
+    const $ = (sel) => document.querySelector(sel);
+
+    // Preserve what the human is typing across the 2s repaint: we keep the
+    // in-flight form values keyed by request id and rehydrate after render.
+    const drafts = {};
+
+    function esc(s) {
+      return String(s ?? "").replace(/[&<>"']/g, (c) => ({
+        "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+      }[c]));
+    }
+
+    function statBox(k, v, accent) {
+      return `<div class="stat"><div class="k">${k}</div>
+        <div class="v ${accent ? "accent" : ""}">${v}</div></div>`;
+    }
+
+    function renderStats(s) {
+      const avg = s.avg_resolve_seconds == null
+        ? "&mdash;"
+        : `${s.avg_resolve_seconds}<small>s</small>`;
+      const top = s.top_category
+        ? esc(s.top_category)
+        : "&mdash;";
+      $("#stats").innerHTML =
+        statBox("Pending", s.pending ?? 0, true) +
+        statBox("Resolved", s.resolved ?? 0) +
+        statBox("Top category", top) +
+        statBox("Avg resolve", avg);
+    }
+
+    function fieldRow(reqId, f) {
+      const type = f.secret ? "password" : "text";
+      const star = f.required ? `<span class="req-star">*</span>` : "";
+      const tag = f.secret ? `<span class="secret-tag">secret</span>` : "";
+      const draft = (drafts[reqId] && drafts[reqId][f.name]) || "";
+      return `<div class="fieldrow">
+        <label>${esc(f.name)}${star}${tag}</label>
+        <input type="${type}" data-field="${esc(f.name)}"
+               value="${esc(draft)}" autocomplete="off" spellcheck="false" />
+      </div>`;
+    }
+
+    function card(r) {
+      const fields = r.response_schema.map((f) => fieldRow(r.id, f)).join("");
+      return `<div class="card" data-id="${r.id}">
+        <div class="card-top">
+          <span class="status-led"></span>
+          <span class="card-title">${esc(r.title)}</span>
+          <span class="req-id">${esc(r.id)}</span>
+          <span class="badge">${esc(r.category)}</span>
+        </div>
+        <div class="card-body">
+          ${r.context ? `<p class="field-label">Context</p>
+             <p class="context">${esc(r.context)}</p>` : ""}
+          ${r.instructions ? `<p class="field-label">Instructions</p>
+             <div class="instructions">${esc(r.instructions)}</div>` : ""}
+          <p class="field-label">Respond</p>
+          <form class="respond">
+            <div class="fields">${fields}</div>
+            <div class="card-actions">
+              <button type="submit" class="send">Send to agent</button>
+              <span class="row-msg"></span>
+            </div>
+          </form>
+        </div>
+      </div>`;
+    }
+
+    async function submitForm(form, id) {
+      const msg = form.querySelector(".row-msg");
+      const btn = form.querySelector("button.send");
+      const response = {};
+      form.querySelectorAll("input[data-field]").forEach((inp) => {
+        response[inp.getAttribute("data-field")] = inp.value;
+      });
+      msg.className = "row-msg"; msg.textContent = "sending...";
+      btn.disabled = true;
+      try {
+        const res = await fetch(`/requests/${id}/resolve`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ response }),
+        });
+        if (res.ok) {
+          delete drafts[id];
+          msg.className = "row-msg ok";
+          msg.textContent = "sent - agent unblocked";
+          setTimeout(refresh, 400);
+        } else {
+          const body = await res.json().catch(() => ({}));
+          msg.className = "row-msg err";
+          msg.textContent = body.detail || `error ${res.status}`;
+          btn.disabled = false;
+        }
+      } catch (e) {
+        msg.className = "row-msg err";
+        msg.textContent = "network error";
+        btn.disabled = false;
+      }
+    }
+
+    function bind() {
+      document.querySelectorAll("form.respond").forEach((form) => {
+        const id = form.closest(".card").dataset.id;
+        form.addEventListener("submit", (e) => {
+          e.preventDefault();
+          submitForm(form, id);
+        });
+        form.querySelectorAll("input[data-field]").forEach((inp) => {
+          inp.addEventListener("input", () => {
+            drafts[id] = drafts[id] || {};
+            drafts[id][inp.getAttribute("data-field")] = inp.value;
+          });
+        });
+      });
+    }
+
+    let focusKey = null;
+    function rememberFocus() {
+      const a = document.activeElement;
+      if (a && a.matches("input[data-field]")) {
+        const card = a.closest(".card");
+        focusKey = card.dataset.id + "|" + a.getAttribute("data-field");
+      } else {
+        focusKey = null;
+      }
+    }
+    function restoreFocus() {
+      if (!focusKey) return;
+      const [id, field] = focusKey.split("|");
+      const el = document.querySelector(
+        `.card[data-id="${id}"] input[data-field="${field}"]`);
+      if (el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length); }
+    }
+
+    async function refresh() {
+      try {
+        rememberFocus();
+        const [rq, st] = await Promise.all([
+          fetch("/api/requests?status=pending").then((r) => r.json()),
+          fetch("/api/stats").then((r) => r.json()),
+        ]);
+        renderStats(st);
+        const pending = rq.requests || [];
+        $("#pending-count").textContent = pending.length;
+        if (pending.length === 0) {
+          $("#list").innerHTML = `<div class="empty">
+            <div class="big">no pending walls</div>
+            <div class="small">every agent is unblocked. new escalations appear here automatically.</div>
+          </div>`;
+        } else {
+          $("#list").innerHTML = pending.map(card).join("");
+          bind();
+          restoreFocus();
+        }
+      } catch (e) {
+        // Backend momentarily unreachable; keep the last render, try again.
+      }
+    }
+
+    refresh();
+    setInterval(refresh, 2000);
+  </script>
+</body>
+</html>

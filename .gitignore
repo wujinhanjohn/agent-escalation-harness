@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+
+# Local harness state
+*.db
+harness.db
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
+
+# Local agent / tooling state
+.claude/
