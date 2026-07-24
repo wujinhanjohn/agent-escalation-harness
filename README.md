@@ -73,12 +73,15 @@ Start the backend first (`./run.sh`), then add this to your Claude Code MCP conf
       "command": "/absolute/path/to/harness/.venv/bin/python",
       "args": ["/absolute/path/to/harness/mcp_server.py"],
       "env": {
-        "HARNESS_URL": "http://127.0.0.1:8000"
+        "HARNESS_URL": "http://127.0.0.1:8000",
+        "HARNESS_ENV_PATH": "/absolute/path/to/your/project/.env"
       }
     }
   }
 }
 ```
+
+`HARNESS_ENV_PATH` points at the `.env` you want resolved secrets written to (defaults to `.env` in the process's working directory). Set it to your project's `.env` so keys land where your app reads them. See [Security](#security) for how secrets are handled and how to set an encryption key.
 
 The agent now has two tools:
 
@@ -129,6 +132,12 @@ Secrets get two protections, addressing two different exposures.
 The agent references the secret by name (`os.environ["SUPABASE_SERVICE_KEY"]`) and its raw bytes never enter the model. Non-secret fields pass through inline. Target file via `HARNESS_ENV_PATH` (default `.env`, created `0600`).
 
 **Encryption at rest - protecting the database file.** The human's `response` is the only column that can hold secrets, so it is encrypted (Fernet: AES-128-CBC + HMAC) before it touches SQLite. A stolen, backed-up, or accidentally committed `harness.db` is useless without the key. The key is resolved from `HARNESS_SECRET_KEY` (base64 Fernet key in the env, e.g. sourced from an OS keychain) or a `HARNESS_KEY_FILE` (default `.harness_key`, auto-created `0600` on first run so it works with zero config). Both `.env` and `.harness_key` are gitignored.
+
+To pin your own key instead of the auto-generated file, set it before starting the backend:
+
+```bash
+export HARNESS_SECRET_KEY=$(python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())")
+```
 
 Honest caveat: nothing stops an agent from *explicitly* running `cat .env` as a separate action - no local tool can fully prevent that. What this guarantees is that the normal resolve flow never places a secret in the model's context, and the values never sit in plaintext on disk.
 
