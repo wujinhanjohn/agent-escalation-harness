@@ -1,0 +1,6 @@
+[tool.pytest.ini_options]
+# Put the project root on sys.path so `import harness` works whether tests are
+# run as `pytest` (console script) or `python -m pytest`. Without this, the
+# bare `pytest` invocation cannot find the harness package.
+pythonpath = ["."]
+testpaths = ["tests"]
