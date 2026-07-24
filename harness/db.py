@@ -15,6 +15,8 @@ import sqlite3
 from datetime import datetime, timezone
 from typing import Any, Optional
 
+from . import crypto
+
 
 def _db_path() -> str:
     return os.environ.get("HARNESS_DB", "harness.db")
@@ -57,6 +59,24 @@ def _new_id() -> str:
     return "req_" + secrets.token_hex(2)
 
 
+def _decode_response(raw: Optional[str]) -> Optional[dict[str, Any]]:
+    """Decrypt and parse a stored response.
+
+    The response is encrypted at rest, so we decrypt first. If decryption
+    fails (e.g. a legacy plaintext row from before encryption was added), we
+    fall back to parsing it directly rather than losing the data.
+    """
+    if not raw:
+        return None
+    try:
+        return json.loads(crypto.decrypt(raw))
+    except Exception:
+        try:
+            return json.loads(raw)
+        except Exception:
+            return None
+
+
 def _row_to_dict(row: sqlite3.Row) -> dict[str, Any]:
     return {
         "id": row["id"],
@@ -66,7 +86,7 @@ def _row_to_dict(row: sqlite3.Row) -> dict[str, Any]:
         "response_schema": json.loads(row["response_schema"]),
         "category": row["category"],
         "status": row["status"],
-        "response": json.loads(row["response"]) if row["response"] else None,
+        "response": _decode_response(row["response"]),
         "created_at": row["created_at"],
         "resolved_at": row["resolved_at"],
     }
@@ -141,11 +161,14 @@ def resolve_request(
     if existing is None or existing["status"] != "pending":
         return None
     resolved_at = _now()
+    # Encrypt the human's values before they touch disk. This is the only
+    # column that can hold secrets, so it is the only one we encrypt.
+    encrypted = crypto.encrypt(json.dumps(response))
     with _connect() as conn:
         conn.execute(
             "UPDATE requests SET status='resolved', response=?, resolved_at=? "
             "WHERE id=?",
-            (json.dumps(response), resolved_at, req_id),
+            (encrypted, resolved_at, req_id),
         )
     return get_request(req_id)
 

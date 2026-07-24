@@ -82,7 +82,7 @@ Start the backend first (`./run.sh`), then add this to your Claude Code MCP conf
 
 The agent now has two tools:
 
-- `request_human(title, instructions, context, response_schema, category, timeout_seconds=300)` - files a request and blocks (long-poll) until a human resolves it or the timeout hits. On resolve it returns the human's values; on timeout it returns `{status: "pending", request_id}` so the agent can keep working and check back.
+- `request_human(title, instructions, context, response_schema, category, timeout_seconds=300)` - files a request and blocks (long-poll) until a human resolves it or the timeout hits. On resolve, non-secret values come back inline and secret fields are written straight to `.env` (see [Security](#security)); on timeout it returns `{status: "pending", request_id}` so the agent can keep working and check back.
 - `check_request(request_id)` - non-blocking status/response lookup for a pending request.
 
 Optional: set `NTFY_TOPIC` in the backend's env to also get a phone push via [ntfy.sh](https://ntfy.sh) when a wall is raised. A failed push never breaks request creation.
@@ -111,6 +111,26 @@ A request is the core abstraction. The `response_schema` both **generates the in
 ```
 
 Secret fields render as password inputs. `category` tags every wall so `/api/stats` can aggregate them.
+
+## Security
+
+Secrets get two protections, addressing two different exposures.
+
+**Secrets by reference - keeping keys out of the agent's context.** An agent's tool results land in the model's context window and the conversation transcript, so returning a raw API key there would leak it. Instead, when a request resolves, fields marked `secret: true` are written directly to a `.env` file on the machine, and the agent gets back only a reference note (the variable name), never the value:
+
+```json
+{
+  "SUPABASE_URL": "https://abc.supabase.co",
+  "SUPABASE_SERVICE_KEY": "<written to .env; reference as ${SUPABASE_SERVICE_KEY}, do not print or echo it>",
+  "secrets_written_to_env": ["SUPABASE_SERVICE_KEY"]
+}
+```
+
+The agent references the secret by name (`os.environ["SUPABASE_SERVICE_KEY"]`) and its raw bytes never enter the model. Non-secret fields pass through inline. Target file via `HARNESS_ENV_PATH` (default `.env`, created `0600`).
+
+**Encryption at rest - protecting the database file.** The human's `response` is the only column that can hold secrets, so it is encrypted (Fernet: AES-128-CBC + HMAC) before it touches SQLite. A stolen, backed-up, or accidentally committed `harness.db` is useless without the key. The key is resolved from `HARNESS_SECRET_KEY` (base64 Fernet key in the env, e.g. sourced from an OS keychain) or a `HARNESS_KEY_FILE` (default `.harness_key`, auto-created `0600` on first run so it works with zero config). Both `.env` and `.harness_key` are gitignored.
+
+Honest caveat: nothing stops an agent from *explicitly* running `cat .env` as a separate action - no local tool can fully prevent that. What this guarantees is that the normal resolve flow never places a secret in the model's context, and the values never sit in plaintext on disk.
 
 ## Design decisions
 

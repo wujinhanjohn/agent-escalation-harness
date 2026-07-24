@@ -11,13 +11,22 @@ this over stdio and register it with a Claude Code MCP config (see README).
 from __future__ import annotations
 
 import os
+import sys
 import time
 from typing import Any
 
 import httpx
 from mcp.server.fastmcp import FastMCP
 
+# Claude Code launches this script from the user's project directory, not from
+# the harness repo, so make the bundled `harness` package importable by adding
+# this file's directory to the path regardless of cwd.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from harness.delivery import build_agent_response  # noqa: E402
+
 HARNESS_URL = os.environ.get("HARNESS_URL", "http://127.0.0.1:8000").rstrip("/")
+# Where secret fields are written so they never enter the agent's context.
+HARNESS_ENV_PATH = os.environ.get("HARNESS_ENV_PATH", ".env")
 POLL_INTERVAL_SECONDS = 2.0
 
 mcp = FastMCP("agent-escalation-harness")
@@ -51,11 +60,15 @@ def request_human(
         timeout_seconds: How long to block waiting for the human.
 
     Returns:
-        On resolve: ``{"status": "resolved", "request_id", "response": {..}}``
-        where ``response`` maps each field name to the human's value - drop
-        these straight into your .env. On timeout:
-        ``{"status": "pending", "request_id"}`` so you can keep working and
-        call ``check_request`` later.
+        On resolve: ``{"status": "resolved", "request_id", "response",
+        "secrets_written_to_env", "env_path"}``. Non-secret fields appear in
+        ``response`` with their values. Secret fields (``secret: true``) are
+        written directly to the .env file and appear in ``response`` only as a
+        reference note, never as the raw value - their names are listed in
+        ``secrets_written_to_env``. Reference them by name (e.g.
+        ``os.environ["STRIPE_SECRET_KEY"]``); do not print or echo them. On
+        timeout: ``{"status": "pending", "request_id"}`` so you can keep
+        working and call ``check_request`` later.
     """
     if response_schema is None:
         response_schema = [{"name": "value", "secret": False, "required": True}]
@@ -80,10 +93,15 @@ def request_human(
             time.sleep(POLL_INTERVAL_SECONDS)
             rec = client.get(f"/requests/{req_id}").json()
             if rec["status"] == "resolved":
+                agent_view, written = build_agent_response(
+                    rec["response_schema"], rec["response"], HARNESS_ENV_PATH
+                )
                 return {
                     "status": "resolved",
                     "request_id": req_id,
-                    "response": rec["response"],
+                    "response": agent_view,
+                    "secrets_written_to_env": written,
+                    "env_path": HARNESS_ENV_PATH if written else None,
                 }
 
     # Still pending: hand the id back so the agent can keep working.
@@ -102,8 +120,11 @@ def check_request(request_id: str) -> dict[str, Any]:
 
     Returns:
         ``{"status", "request_id", "response"}``. ``response`` is null while
-        still pending and the human's values once resolved. ``status`` is
-        "unknown" if the id does not exist.
+        still pending. Once resolved it follows the same secret-by-reference
+        rule as ``request_human``: non-secret values are present, secret
+        fields are written to .env and shown only as a reference note (their
+        names in ``secrets_written_to_env``). ``status`` is "unknown" if the
+        id does not exist.
     """
     with httpx.Client(base_url=HARNESS_URL, timeout=10.0) as client:
         res = client.get(f"/requests/{request_id}")
@@ -111,10 +132,18 @@ def check_request(request_id: str) -> dict[str, Any]:
             return {"status": "unknown", "request_id": request_id, "response": None}
         res.raise_for_status()
         rec = res.json()
+
+    if rec["status"] != "resolved":
+        return {"status": rec["status"], "request_id": request_id, "response": None}
+
+    agent_view, written = build_agent_response(
+        rec["response_schema"], rec["response"], HARNESS_ENV_PATH
+    )
     return {
-        "status": rec["status"],
+        "status": "resolved",
         "request_id": request_id,
-        "response": rec["response"],
+        "response": agent_view,
+        "secrets_written_to_env": written,
     }
 
 

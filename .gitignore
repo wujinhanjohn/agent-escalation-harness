@@ -10,6 +10,11 @@ venv/
 *.db
 harness.db
 
+# Secrets: never commit
+.env
+.env.*
+.harness_key
+
 # Editor / OS
 .DS_Store
 .idea/
